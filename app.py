@@ -59,10 +59,13 @@ def get_best(tag, topn):
         logging.error(f"Error fetching best hashtags for '{tag}': {e}")
         return []
 
+@st.cache_data
 def load_data():
-    with open("database.json", "r") as f:
-        data = json.load(f)
-    return data
+    # Try to load from session state if it exists
+    if 'data' not in st.session_state:
+        with open("database.json", "r") as f:
+            st.session_state.data = json.load(f)
+    return st.session_state.data
 
 data = load_data()
 
@@ -105,8 +108,8 @@ if st.sidebar.button("Create Hashtags"):
     df = pd.DataFrame(hashtag_data, columns=["hashtag", "count"])
     df = df.sort_values("count")
 
-    with open("database.json", "w") as f:
-        json.dump(data, f, indent=4)
-    
+    # Save back to session state instead of file
+    st.session_state.data = data
+
     fig = px.bar(df, x='hashtag', y='count')
     st.plotly_chart(fig, use_container_width=True)
