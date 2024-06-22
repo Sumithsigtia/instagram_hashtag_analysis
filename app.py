@@ -1,42 +1,47 @@
 import streamlit as st
-
-# scraping
 import requests
 from bs4 import BeautifulSoup
-
-#data
 import json
 import pandas as pd
-
-# plotting
 import plotly.express as px
-# import plotly.plotly as py
-# import plotly.graph_objs as go
+import re
+import logging
 
-import seaborn as sns
-
+logging.basicConfig(level=logging.INFO)
 
 st.title("Instagram Hashtag Analysis")
 
 def get_count(tag):
     try:
         url = f"https://www.instagram.com/explore/tags/{tag}/"
-        s = requests.get(url)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        s = requests.get(url, headers=headers)
         soup = BeautifulSoup(s.content, 'html.parser')
         
-        # Look for specific meta tags or patterns in the page content
         meta_tag = soup.find('meta', {'property': 'og:description'})
         if meta_tag and 'content' in meta_tag.attrs:
             content = meta_tag['content']
-            # Extract number of posts
-            count_str = content.split(" ")[0]
-            return int(count_str.replace("K", "000").replace("B", "000000000").replace("M", "000000").replace(".", ""))
+            match = re.search(r'([\d,.]+)([KMB]?)', content)
+            if match:
+                number = match.group(1).replace(",", "")
+                suffix = match.group(2)
+                if suffix == 'K':
+                    count = int(float(number) * 1_000)
+                elif suffix == 'M':
+                    count = int(float(number) * 1_000_000)
+                elif suffix == 'B':
+                    count = int(float(number) * 1_000_000_000)
+                else:
+                    count = int(number)
+                
+                logging.info(f"Fetched count for #{tag}: {count}")
+                return count
         
-        return None  # Return None if count is not found
-    except Exception as e:
-        print(f"Error fetching data for tag '{tag}': {e}")
+        logging.warning(f"Count not found for #{tag}")
         return None
-
+    except Exception as e:
+        logging.error(f"Error fetching data for tag '{tag}': {e}")
+        return None
 
 def get_best(tag, topn):
     try:
@@ -51,14 +56,13 @@ def get_best(tag, topn):
         
         return []  # Return an empty list if no tags are found
     except Exception as e:
-        print(f"Error fetching best hashtags for '{tag}': {e}")
+        logging.error(f"Error fetching best hashtags for '{tag}': {e}")
         return []
 
 def load_data():
     with open("database.json", "r") as f:
         data = json.load(f)
     return data
-
 
 data = load_data()
 
@@ -68,7 +72,6 @@ sizes = []
 st.sidebar.header("Tags")
 col1, col2 = st.sidebar.columns(2)
 
-
 for i in range(num_tags):
     tag = col1.text_input(f"Tag {i}", key=f"tag_{i}")
     size = col2.number_input(f"Top-N {i}", 1, 10, key=f"size_{i}")
@@ -77,7 +80,7 @@ for i in range(num_tags):
 
 if st.sidebar.button("Create Hashtags"):
     tab_names = ["all"]
-    tab_names = tab_names+[tags[i] for i in range(num_tags)]
+    tab_names = tab_names + [tags[i] for i in range(num_tags)]
     tag_tabs = st.tabs(tab_names)
     all_hashtags = []
     hashtag_data = []
@@ -88,13 +91,14 @@ if st.sidebar.button("Create Hashtags"):
                 hashtag_count = data["hashtag_data"][hashtag]
             else:
                 hashtag_count = get_count(hashtag.replace("#", ""))
+                if hashtag_count is None:
+                    hashtag_count = 0  # Default to 0 if count fetching fails
                 data["hashtag_data"][hashtag] = hashtag_count
             hashtag_data.append((f"{hashtag}<br>{hashtag_count:,}", hashtag_count))
-
-     
+        
         tag_tabs[i+1].text_area(f"Tags for {tags[i]}", " ".join(hashtags))
-        all_hashtags = all_hashtags+hashtags
-  
+        all_hashtags = all_hashtags + hashtags
+    
     tag_tabs[0].text_area("All Hashtags", " ".join(all_hashtags))
 
     st.header("Hashtag Count Data")
