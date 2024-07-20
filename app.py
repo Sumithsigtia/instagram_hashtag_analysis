@@ -63,9 +63,16 @@ def get_best(tag, topn):
 def load_data():
     # Try to load from session state if it exists
     if 'data' not in st.session_state:
-        with open("database.json", "r") as f:
-            st.session_state.data = json.load(f)
+        try:
+            with open("database.json", "r") as f:
+                st.session_state.data = json.load(f)
+        except FileNotFoundError:
+            st.session_state.data = {"hashtag_data": {}}
     return st.session_state.data
+
+def save_data(data):
+    with open("database.json", "w") as f:
+        json.dump(data, f, indent=4)
 
 data = load_data()
 
@@ -108,8 +115,9 @@ if st.sidebar.button("Create Hashtags"):
     df = pd.DataFrame(hashtag_data, columns=["hashtag", "count"])
     df = df.sort_values("count")
 
-    # Save back to session state instead of file
+    # Save back to session state and to the file
     st.session_state.data = data
+    save_data(data)
 
     fig = px.bar(df, x='hashtag', y='count')
     st.plotly_chart(fig, use_container_width=True)
